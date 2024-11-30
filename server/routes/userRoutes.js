@@ -40,19 +40,35 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
-    if (!user) {
-        console.log("Invalid credentials")
-      return res.status(400).json({ message: 'Invalid credentials' });
+
+    if (!user || !await bcrypt.compare(password, user.password)) {
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-        console.log("Invalid credentials")
-      return res.status(400).json({ message: 'Invalid credentials' });
-    }
-    const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET);
-    console.log(`User ${email} logged in successfully`)
-    res.json({ token, user: { id: user._id, email: user.email, role: user.role } });
+
+    // Create token with userId
+    const token = jwt.sign(
+      { 
+        userId: user._id.toString() // Ensure it's a string
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    console.log('Generated token for user:', {
+      userId: user._id,
+      email: user.email
+    });
+
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        role: user.role
+      }
+    });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ message: 'Error logging in' });
   }
 });
