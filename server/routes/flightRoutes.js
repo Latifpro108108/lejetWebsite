@@ -4,6 +4,7 @@ const Flight = require('../models/Flight');
 const Booking = require('../models/Booking');
 const auth = require('../middleware/auth');
 const { sendEmail } = require('../utils/emailServices');
+const { sendTicketConfirmation } = require('../utils/emailServices'); // Add this import
 
 // Search flights
 router.get('/search', async (req, res) => {
@@ -145,48 +146,48 @@ router.post('/book', auth, async (req, res) => {
 router.post('/confirm-payment', auth, async (req, res) => {
   try {
     const { bookingId, paymentMethod, paymentDetails } = req.body;
-
-    const booking = await Booking.findById(bookingId);
+    
+    // Find booking and populate all necessary fields
+    const booking = await Booking.findById(bookingId)
+      .populate('user')
+      .populate({
+        path: 'flight',
+        populate: {
+          path: 'airplane'
+        }
+      });
+    
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
 
-    if (booking.user.toString() !== req.user.id) {
+    // Verify ownership
+    if (booking.user._id.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Unauthorized' });
     }
 
-    // Process payment (integrate with payment gateway here)
-    // For now, we'll simulate payment success
+    // Update booking
     booking.status = 'confirmed';
     booking.paymentMethod = paymentMethod;
     booking.paymentDate = new Date();
-    booking.paymentDetails = paymentDetails;
-
+    booking.ticketNumber = `LJ${Date.now().toString().slice(-6)}`;
+    
     await booking.save();
 
-    // Send payment confirmation email
-    const emailHtml = `
-      <h1>Payment Confirmation</h1>
-      <p>Dear ${req.user.name},</p>
-      <p>Your payment has been successfully processed. Here are the details:</p>
-      <ul>
-        <li>Ticket Number: ${booking.ticketNumber}</li>
-        <li>Amount Paid: GH₵${booking.totalAmount}</li>
-        <li>Payment Method: ${paymentMethod}</li>
-        <li>Payment Date: ${new Date().toLocaleString()}</li>
-      </ul>
-      <p>Thank you for choosing LEJET Airline!</p>
-    `;
+    // Send email confirmation
+    try {
+      console.log('Attempting to send ticket confirmation email to:', booking.user.email);
+      await sendTicketConfirmation(booking);
+      console.log('Ticket confirmation email sent successfully');
+    } catch (emailError) {
+      console.error('Error sending ticket confirmation email:', emailError);
+      // Continue with the process even if email fails
+    }
 
-    await sendEmail(req.user.email, 'Payment Confirmation - LEJET Airline', emailHtml);
-
+    // Return success response
     res.json({
       message: 'Payment confirmed successfully',
-      booking: {
-        id: booking._id,
-        status: booking.status,
-        ticketNumber: booking.ticketNumber
-      }
+      booking: booking.toObject()
     });
   } catch (error) {
     console.error('Payment confirmation error:', error);
