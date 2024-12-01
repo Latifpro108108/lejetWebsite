@@ -19,8 +19,10 @@ const flightSchema = new mongoose.Schema({
     required: true,
     validate: {
       validator: function(value) {
-        // Ensure departure time is in the future
-        return value > new Date();
+        if (!this.isRecurring) {
+          return value > new Date();
+        }
+        return true;
       },
       message: 'Departure time must be in the future'
     }
@@ -30,7 +32,6 @@ const flightSchema = new mongoose.Schema({
     required: true,
     validate: {
       validator: function(value) {
-        // Ensure arrival time is after departure time
         return value > this.departureTime;
       },
       message: 'Arrival time must be after departure time'
@@ -38,20 +39,24 @@ const flightSchema = new mongoose.Schema({
   },
   economyPrice: {
     type: Number,
-    required: true
+    required: true,
+    min: [0, 'Price cannot be negative']
   },
   firstClassPrice: {
     type: Number,
-    required: true
+    required: true,
+    min: [0, 'Price cannot be negative']
   },
   availableSeats: {
     economy: {
       type: Number,
-      required: true
+      required: true,
+      min: [0, 'Available seats cannot be negative']
     },
     firstClass: {
       type: Number,
-      required: true
+      required: true,
+      min: [0, 'Available seats cannot be negative']
     }
   },
   status: {
@@ -74,7 +79,6 @@ const flightSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Add indexes for better performance
 flightSchema.index({ airplane: 1, departureTime: 1 });
 flightSchema.index({ from: 1, to: 1, departureTime: 1 });
 flightSchema.index({ status: 1 });
